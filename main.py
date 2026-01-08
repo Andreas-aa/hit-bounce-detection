@@ -239,7 +239,7 @@ def supervized_hit_bounce_detection(json_path: Path):
 
     # Build features and preprocess
     new_df = build_features(file_df, smooth_window=7)
-    preprocessors = joblib.load("model/preprocessors.joblib")
+    preprocessors = joblib.load("preprocessors.joblib")
     X_new, X_new_deep = transform_for_model(new_df, preprocessors)
 
     # Load model and predict
