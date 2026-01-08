@@ -1,0 +1,36 @@
+Channels:
+ - conda-forge
+Platform: linux-64
+Collecting package metadata (repodata.json): ...working... done
+Solving environment: ...working... done
+
+## Package Plan ##
+
+  environment location: /home/andreasab/miniforge3/envs/hit_bounce_env
+
+  added / updated specs:
+    - ipykernel
+    - jupyter_client
+    - tornado
+    - traitlets
+    - typing-extensions
+
+
+The following packages will be downloaded:
+
+    package                    |            build
+    ---------------------------|-----------------
+    typing-extensions-4.5.0    |       hd8ed1ab_0           9 KB  conda-forge
+    ------------------------------------------------------------
+                                           Total:           9 KB
+
+The following NEW packages will be INSTALLED:
+
+  typing-extensions  conda-forge/noarch::typing-extensions-4.5.0-hd8ed1ab_0 
+
+
+
+Downloading and Extracting Packages: ...working...typing-extensions-4. | 9 KB      |            |   0% typing-extensions-4. | 9 KB      | ########## | 100% typing-extensions-4. | 9 KB      | ########## | 100% typing-extensions-4. | 9 KB      | ########## | 100%                                                       done
+Preparing transaction: - done
+Verifying transaction: | / - done
+Executing transaction: | done
