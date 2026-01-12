@@ -1,38 +1,40 @@
 import json
-from typing import Dict, Any
+from pathlib import Path
+
+import joblib
 import numpy as np
 import pandas as pd
-import os
-import joblib
-import Path
 
 FEATURE_COLS = [
     "delta_angle",
-    "vx_sign_change", 
+    "vx_sign_change",
     "vy_sign_change",
-    "v_mean", "v_std",
-    "a_mean", "a_std",
-    "j_mean", "j_std",
-    "vx_abs_raw", "vy_abs_raw",
-    "ax_abs_raw", "ay_abs_raw",
-    "jx_abs_raw", "jy_abs_raw",
+    "v_mean",
+    "v_std",
+    "a_mean",
+    "a_std",
+    "j_mean",
+    "j_std",
+    "vx_abs_raw",
+    "vy_abs_raw",
+    "ax_abs_raw",
+    "ay_abs_raw",
+    "jx_abs_raw",
+    "jy_abs_raw",
 ]
 
 FEATURE_COLS_DEEP = FEATURE_COLS + ["x_i", "y_i"]
 
+
 # Load trained model
-def load_model(model_path="model/lstm_model.joblib"):
- with open(model_path, "rb") as f:
-     model = joblib.load(f)
- return model
-
-
+def load_model(model_path="model/rf_model.joblib"):
+    with open(model_path, "rb") as f:
+        model = joblib.load(f)
+    return model
 
 
 if __name__ == "__main__":
- model = load_model()
- 
-
+    model = load_model()
 
 
 def build_features(
@@ -68,18 +70,18 @@ def build_features(
     def angular_diff(series):
         """Central difference with boundary handling and pi-wrapping"""
         diff = series.shift(-1) - series.shift(1)
-        
+
         # wrap to [-pi, pi]
         diff = (diff + np.pi) % (2 * np.pi) - np.pi
-        
+
         # forward difference at start
         diff.iloc[0] = series.iloc[1] - series.iloc[0]
         diff.iloc[0] = (diff.iloc[0] + np.pi) % (2 * np.pi) - np.pi
-        
+
         # backward difference at end
         diff.iloc[-1] = series.iloc[-1] - series.iloc[-2]
         diff.iloc[-1] = (diff.iloc[-1] + np.pi) % (2 * np.pi) - np.pi
-        
+
         return diff / 2  # divide by 2 for central difference
 
     subset = subset_df.copy()
@@ -105,16 +107,11 @@ def build_features(
     # Impulsive events are preserved as extrema and sign changes in
     # derived kinematic quantities.
     subset["x_s"] = (
-        subset["x_raw"]
-        .rolling(smooth_window, center=True, min_periods=1)
-        .mean()
+        subset["x_raw"].rolling(smooth_window, center=True, min_periods=1).mean()
     )
     subset["y_s"] = (
-        subset["y_raw"]
-        .rolling(smooth_window, center=True, min_periods=1)
-        .mean()
+        subset["y_raw"].rolling(smooth_window, center=True, min_periods=1).mean()
     )
-
 
     # ------------------------------------------------------------------
     # Time step (central)
@@ -133,7 +130,7 @@ def build_features(
 
     subset["vx"] = dx_s / dt
     subset["vy"] = dy_s / dt
-    
+
     subset["ax"] = second_diff(subset["x_s"]) / dt
     subset["ay"] = second_diff(subset["y_s"]) / dt
 
@@ -169,9 +166,9 @@ def build_features(
     # ------------------------------------------------------------------
     # Magnitudes (smoothed)
     # ------------------------------------------------------------------
-    subset["v"] = np.sqrt(subset["vx"]**2 + subset["vy"]**2)
-    subset["a"] = np.sqrt(subset["ax"]**2 + subset["ay"]**2)
-    subset["jerk"] = np.sqrt(subset["jx"]**2 + subset["jy"]**2)
+    subset["v"] = np.sqrt(subset["vx"] ** 2 + subset["vy"] ** 2)
+    subset["a"] = np.sqrt(subset["ax"] ** 2 + subset["ay"] ** 2)
+    subset["jerk"] = np.sqrt(subset["jx"] ** 2 + subset["jy"] ** 2)
 
     # ------------------------------------------------------------------
     # Directional features
@@ -186,26 +183,24 @@ def build_features(
     w = smooth_window
 
     subset["v_mean"] = subset["v"].rolling(w, center=True, min_periods=1).mean()
-    subset["v_std"]  = subset["v"].rolling(w, center=True, min_periods=1).std().fillna(0)
+    subset["v_std"] = subset["v"].rolling(w, center=True, min_periods=1).std().fillna(0)
 
     subset["a_mean"] = subset["a"].rolling(w, center=True, min_periods=1).mean()
-    subset["a_std"]  = subset["a"].rolling(w, center=True, min_periods=1).std().fillna(0)
+    subset["a_std"] = subset["a"].rolling(w, center=True, min_periods=1).std().fillna(0)
 
     subset["j_mean"] = subset["jerk"].rolling(w, center=True, min_periods=1).mean()
-    subset["j_std"]  = subset["jerk"].rolling(w, center=True, min_periods=1).std().fillna(0)
+    subset["j_std"] = (
+        subset["jerk"].rolling(w, center=True, min_periods=1).std().fillna(0)
+    )
 
     # ------------------------------------------------------------------
     # Motion sign changes (robust bounce indicator)
     # ------------------------------------------------------------------
     subset["vx_sign"] = np.sign(subset["vx"]).fillna(0.0)
-    subset["vx_sign_change"] = (
-        subset["vx_sign"].diff().abs() > 0
-    ).astype(int)
-    
+    subset["vx_sign_change"] = (subset["vx_sign"].diff().abs() > 0).astype(int)
+
     subset["vy_sign"] = np.sign(subset["vy"]).fillna(0.0)
-    subset["vy_sign_change"] = (
-        subset["vy_sign"].diff().abs() > 0
-    ).astype(int)
+    subset["vy_sign_change"] = (subset["vy_sign"].diff().abs() > 0).astype(int)
 
     return subset
 
@@ -227,7 +222,7 @@ def supervized_hit_bounce_detection(json_path: Path):
     # Load JSON into a DataFrame
     df = pd.DataFrame(columns=["x", "y", "visible"])
     df.index.name = "image_frame"
-    
+
     with json_path.open("r", encoding="utf-8") as f:
         ball_data = json.load(f)
 
@@ -244,16 +239,15 @@ def supervized_hit_bounce_detection(json_path: Path):
 
     # Load model and predict
     model = load_model()
-    y_pred = model.predict(X_new_deep)
-    y_pred_labels = preprocessors["label_encoder"].inverse_transform(y_pred)
+    y_pred = model.predict(X_new)
 
-    # 4️⃣ Add predictions as a new column
-    new_df["action"] = y_pred_labels
+    # Add predictions as a new column
+    new_df["action"] = y_pred
 
-    # 5️⃣ Update original JSON
+    # Update original JSON
     # Convert DataFrame back to dictionary with same structure
     updated_json = new_df[["x", "y", "visible", "action"]].T.to_dict()
-    
+
     with json_path.open("w", encoding="utf-8") as f:
         json.dump(updated_json, f, indent=4)
 
