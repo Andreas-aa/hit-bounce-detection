@@ -61,7 +61,7 @@ def build_features(
     new_df = new_df.sort_index()
     new_df["x_i"] = pd.to_numeric(new_df["x"], errors="coerce")
     new_df["y_i"] = pd.to_numeric(new_df["y"], errors="coerce")
-    new_df = new_df.dropna(new_df=["x_i", "y_i"])
+    new_df = new_df.dropna(subset=["x_i", "y_i"])
     
 
     # ------------------------------------------------------------------
@@ -323,7 +323,7 @@ def supervized_hit_bounce_detection(json_path: Path):
     new_df = build_features(file_df, smooth_window=SMOOTH_WINDOW)
     preprocessors = joblib.load("preprocessors.joblib")
     # Predicting using Random Forest, no need for Deep Learning Features
-    _, X_new, _ = transform_for_model(new_df, preprocessors)
+    X_new, _, _ = transform_for_model(new_df, preprocessors)
 
     # Load model and predict
     model = load_model()
@@ -367,10 +367,12 @@ def unsupervized_hit_bounce_detection(json_path: Path):
     y_pred = detect_hits_and_bounces(new_df, thresholds=thresh)
     y_pred_array = np.array(["air"] * len(new_df), dtype=object)
     for frame, label in y_pred.items():
-        if frame in df.index:
-            idx = df.index.get_loc(frame)
+        try:
+            idx = new_df.index.get_loc(frame)
             y_pred_array[idx] = label
-
+        except KeyError:
+            # frame not in index, skip
+            pass
     new_df["action"] = y_pred_array
 
 
@@ -378,8 +380,8 @@ def unsupervized_hit_bounce_detection(json_path: Path):
     # Convert DataFrame back to dictionary with same structure
     updated_json = new_df[["x", "y", "visible", "action"]].T.to_dict()
 
-    # with json_path.open("w", encoding="utf-8") as f:
-    #     json.dump(updated_json, f, indent=4)
+    with json_path.open("w", encoding="utf-8") as f:
+        json.dump(updated_json, f, indent=4)
 
     print(f"Predictions added to '{json_path}' successfully!")
 
