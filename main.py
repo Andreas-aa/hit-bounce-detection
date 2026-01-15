@@ -7,23 +7,22 @@ import pandas as pd
 
 FEATURE_COLS = [
     "delta_angle",
-    "vx_sign_change",
+    "vx_sign_change", 
     "vy_sign_change",
-    "v_mean",
-    "v_std",
-    "a_mean",
-    "a_std",
-    "j_mean",
-    "j_std",
-    "vx_abs_raw",
-    "vy_abs_raw",
-    "ax_abs_raw",
-    "ay_abs_raw",
-    "jx_abs_raw",
-    "jy_abs_raw",
+    "v", "a", "jerk",
+    "vx", 'vy', 'ax', 'ay', 'jx', 'jy',
+    "v_mean", "v_std",
+    "a_mean", "a_std",
+    "j_mean", "j_std",
+    "log_v", "log_a", "log_j",
+    "vx_abs_raw", "vy_abs_raw",
+    "ax_abs_raw", "ay_abs_raw",
+    "jx_abs_raw", "jy_abs_raw",
 ]
 
 FEATURE_COLS_DEEP = FEATURE_COLS + ["x_i", "y_i"]
+
+SMOOTH_WINDOW = 7
 
 
 # Load trained model
@@ -39,61 +38,26 @@ if __name__ == "__main__":
 
 def build_features(
     subset_df: pd.DataFrame,
-    smooth_window: int = 5,
+    smooth_window: int = 7,
 ) -> pd.DataFrame:
     """
     Feature builder for ball hit / bounce detection.
 
     """
 
-    def central_diff(series):
-        """Central diff with forward/backward at boundaries."""
-        diff = series.shift(-1) - series.shift(1)
-
-        # forward diff at start
-        diff.iloc[0] = series.iloc[1] - series.iloc[0]
-
-        # backward diff at end
-        diff.iloc[-1] = series.iloc[-1] - series.iloc[-2]
-
-        return diff
-
-    def second_diff(series):
-        """Second derivative with asymmetric boundaries."""
-        diff2 = series.shift(-1) - 2 * series + series.shift(1)
-
-        diff2.iloc[0] = series.iloc[2] - 2 * series.iloc[1] + series.iloc[0]
-        diff2.iloc[-1] = series.iloc[-1] - 2 * series.iloc[-2] + series.iloc[-3]
-
-        return diff2
-
-    def angular_diff(series):
-        """Central difference with boundary handling and pi-wrapping"""
-        diff = series.shift(-1) - series.shift(1)
-
-        # wrap to [-pi, pi]
-        diff = (diff + np.pi) % (2 * np.pi) - np.pi
-
-        # forward difference at start
-        diff.iloc[0] = series.iloc[1] - series.iloc[0]
-        diff.iloc[0] = (diff.iloc[0] + np.pi) % (2 * np.pi) - np.pi
-
-        # backward difference at end
-        diff.iloc[-1] = series.iloc[-1] - series.iloc[-2]
-        diff.iloc[-1] = (diff.iloc[-1] + np.pi) % (2 * np.pi) - np.pi
-
-        return diff / 2  # divide by 2 for central difference
-
+    # ------------------------------------------------------------------
+    # Numeric positions and index
+    # ------------------------------------------------------------------
     subset = subset_df.copy()
+    subset.index = pd.to_numeric(subset.index, errors="coerce")
     subset = subset.sort_index()
-
-    # --- numeric positions ---
     subset["x_i"] = pd.to_numeric(subset["x"], errors="coerce")
     subset["y_i"] = pd.to_numeric(subset["y"], errors="coerce")
     subset = subset.dropna(subset=["x_i", "y_i"])
+    
 
     # ------------------------------------------------------------------
-    # Raw positions (always preserved)
+    # Raw positions
     # ------------------------------------------------------------------
     subset["x_raw"] = subset["x_i"]
     subset["y_raw"] = subset["y_i"]
@@ -104,53 +68,65 @@ def build_features(
 
     # Centered rolling mean reduces high-frequency measurement noise
     # without eliminating physical discontinuities (hits / bounces).
-    # Impulsive events are preserved as extrema and sign changes in
-    # derived kinematic quantities.
-    subset["x_s"] = (
-        subset["x_raw"].rolling(smooth_window, center=True, min_periods=1).mean()
+    subset["x_smooth"] = (
+        subset["x_raw"]
+        .rolling(smooth_window, center=True, min_periods=1)
+        .mean()
     )
-    subset["y_s"] = (
-        subset["y_raw"].rolling(smooth_window, center=True, min_periods=1).mean()
+    subset["y_smooth"] = (
+        subset["y_raw"]
+        .rolling(smooth_window, center=True, min_periods=1)
+        .mean()
     )
 
     # ------------------------------------------------------------------
     # Time step (central)
     # ------------------------------------------------------------------
-    subset.index = pd.to_numeric(subset.index, errors="coerce")
     t = subset.index.to_series()
-    dt = t.shift(-1) - t.shift(1)
-    dt.iloc[0] = t.iloc[1] - t.iloc[0]
-    dt.iloc[-1] = t.iloc[-1] - t.iloc[-2]
 
     # ------------------------------------------------------------------
     # Smoothed derivatives (stable kinematics)
     # ------------------------------------------------------------------
-    dx_s = central_diff(subset["x_s"])
-    dy_s = central_diff(subset["y_s"])
+    x_smooth = subset["x_smooth"].to_numpy()
+    y_smooth = subset["y_smooth"].to_numpy()
 
-    subset["vx"] = dx_s / dt
-    subset["vy"] = dy_s / dt
+    vx = np.gradient(x_smooth, t)
+    vy = np.gradient(y_smooth, t)
 
-    subset["ax"] = second_diff(subset["x_s"]) / dt
-    subset["ay"] = second_diff(subset["y_s"]) / dt
+    ax = np.gradient(vx, t)
+    ay = np.gradient(vy, t)
 
-    subset["jx"] = second_diff(subset["vx"]) / dt
-    subset["jy"] = second_diff(subset["vy"]) / dt
+    jx = np.gradient(ax, t)
+    jy = np.gradient(ay, t)
+
+    subset["vx"] = vx
+    subset["vy"] = vy
+    subset["ax"] = ax
+    subset["ay"] = ay
+    subset["jx"] = jx
+    subset["jy"] = jy
 
     # ------------------------------------------------------------------
     # Raw derivatives (impulse-sensitive)
     # ------------------------------------------------------------------
-    dx_r = central_diff(subset["x_raw"])
-    dy_r = central_diff(subset["y_raw"])
+    x_raw = subset["x_raw"].to_numpy()
+    y_raw = subset["y_raw"].to_numpy()
 
-    subset["vx_raw"] = dx_r / dt
-    subset["vy_raw"] = dy_r / dt
+    vx_raw = np.gradient(x_raw, t)
+    vy_raw = np.gradient(y_raw, t)
 
-    subset["ax_raw"] = second_diff(subset["x_raw"]) / dt
-    subset["ay_raw"] = second_diff(subset["y_raw"]) / dt
+    ax_raw = np.gradient(vx_raw, t)
+    ay_raw = np.gradient(vy_raw, t)
 
-    subset["jx_raw"] = second_diff(subset["vx_raw"]) / dt
-    subset["jy_raw"] = second_diff(subset["vy_raw"]) / dt
+    jx_raw = np.gradient(ax_raw, t)
+    jy_raw = np.gradient(ay_raw, t)
+
+    subset["vx_raw"] = vx_raw
+    subset["vy_raw"] = vy_raw
+    subset["ax_raw"] = ax_raw
+    subset["ay_raw"] = ay_raw
+    subset["jx_raw"] = jx_raw
+    subset["jy_raw"] = jy_raw
 
     # ------------------------------------------------------------------
     # Raw derivatubes in absolute
@@ -166,41 +142,47 @@ def build_features(
     # ------------------------------------------------------------------
     # Magnitudes (smoothed)
     # ------------------------------------------------------------------
-    subset["v"] = np.sqrt(subset["vx"] ** 2 + subset["vy"] ** 2)
-    subset["a"] = np.sqrt(subset["ax"] ** 2 + subset["ay"] ** 2)
-    subset["jerk"] = np.sqrt(subset["jx"] ** 2 + subset["jy"] ** 2)
+    subset["v"] = np.sqrt(subset["vx"]**2 + subset["vy"]**2)
+    subset["a"] = np.sqrt(subset["ax"]**2 + subset["ay"]**2)
+    subset["jerk"] = np.sqrt(subset["jx"]**2 + subset["jy"]**2)
+
+    # ------------------------------------------------------------------
+    # Log magnitudes : preserves order and compresses large values
+    # ------------------------------------------------------------------
+    subset["log_v"] = np.log1p(subset["v"])    
+    subset["log_a"] = np.log1p(subset["a"])
+    subset["log_j"] = np.log1p(subset["jerk"])
 
     # ------------------------------------------------------------------
     # Directional features
     # ------------------------------------------------------------------
     subset["angle"] = np.arctan2(subset["vy"], subset["vx"])
-
-    subset["delta_angle"] = angular_diff(subset["angle"])
-
-    # ------------------------------------------------------------------
-    # Centered rolling statistics (smoothed features)
-    # ------------------------------------------------------------------
-    w = smooth_window
-
-    subset["v_mean"] = subset["v"].rolling(w, center=True, min_periods=1).mean()
-    subset["v_std"] = subset["v"].rolling(w, center=True, min_periods=1).std().fillna(0)
-
-    subset["a_mean"] = subset["a"].rolling(w, center=True, min_periods=1).mean()
-    subset["a_std"] = subset["a"].rolling(w, center=True, min_periods=1).std().fillna(0)
-
-    subset["j_mean"] = subset["jerk"].rolling(w, center=True, min_periods=1).mean()
-    subset["j_std"] = (
-        subset["jerk"].rolling(w, center=True, min_periods=1).std().fillna(0)
-    )
+    subset["delta_angle"] = np.gradient(subset["angle"])
 
     # ------------------------------------------------------------------
-    # Motion sign changes (robust bounce indicator)
+    # Centered rolling statistics (smoothed)
+    # ------------------------------------------------------------------
+    subset["v_mean"] = subset["v"].rolling(smooth_window, center=True, min_periods=1).mean()
+    subset["v_std"]  = subset["v"].rolling(smooth_window, center=True, min_periods=1).std().fillna(0)
+
+    subset["a_mean"] = subset["a"].rolling(smooth_window, center=True, min_periods=1).mean()
+    subset["a_std"]  = subset["a"].rolling(smooth_window, center=True, min_periods=1).std().fillna(0)
+
+    subset["j_mean"] = subset["jerk"].rolling(smooth_window, center=True, min_periods=1).mean()
+    subset["j_std"]  = subset["jerk"].rolling(smooth_window, center=True, min_periods=1).std().fillna(0)
+
+    # ------------------------------------------------------------------
+    # Motion sign changes
     # ------------------------------------------------------------------
     subset["vx_sign"] = np.sign(subset["vx"]).fillna(0.0)
-    subset["vx_sign_change"] = (subset["vx_sign"].diff().abs() > 0).astype(int)
-
+    subset["vx_sign_change"] = (
+        subset["vx_sign"].diff().abs() > 0
+    ).astype(int)
+    
     subset["vy_sign"] = np.sign(subset["vy"]).fillna(0.0)
-    subset["vy_sign_change"] = (subset["vy_sign"].diff().abs() > 0).astype(int)
+    subset["vy_sign_change"] = (
+        subset["vy_sign"].diff().abs() > 0
+    ).astype(int)
 
     return subset
 
@@ -233,8 +215,9 @@ def supervized_hit_bounce_detection(json_path: Path):
     file_df = file_df.reindex(columns=["x", "y", "visible"])
 
     # Build features and preprocess
-    new_df = build_features(file_df, smooth_window=7)
+    new_df = build_features(file_df, smooth_window=SMOOTH_WINDOW)
     preprocessors = joblib.load("preprocessors.joblib")
+    # Predicting using Random Forest, no need for Deep Learning Features
     X_new, X_new_deep = transform_for_model(new_df, preprocessors)
 
     # Load model and predict
@@ -252,3 +235,5 @@ def supervized_hit_bounce_detection(json_path: Path):
         json.dump(updated_json, f, indent=4)
 
     print(f"Predictions added to '{json_path}' successfully!")
+
+    return updated_json
