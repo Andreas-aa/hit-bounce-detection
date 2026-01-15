@@ -56,19 +56,19 @@ def build_features(
     # ------------------------------------------------------------------
     # Numeric positions and index
     # ------------------------------------------------------------------
-    df = df.copy()
-    df.index = pd.to_numeric(df.index, errors="coerce")
-    df = df.sort_index()
-    df["x_i"] = pd.to_numeric(df["x"], errors="coerce")
-    df["y_i"] = pd.to_numeric(df["y"], errors="coerce")
-    df = df.dropna(df=["x_i", "y_i"])
+    new_df = df.copy()
+    new_df.index = pd.to_numeric(new_df.index, errors="coerce")
+    new_df = new_df.sort_index()
+    new_df["x_i"] = pd.to_numeric(new_df["x"], errors="coerce")
+    new_df["y_i"] = pd.to_numeric(new_df["y"], errors="coerce")
+    new_df = new_df.dropna(new_df=["x_i", "y_i"])
     
 
     # ------------------------------------------------------------------
     # Raw positions
     # ------------------------------------------------------------------
-    df["x_raw"] = df["x_i"]
-    df["y_raw"] = df["y_i"]
+    new_df["x_raw"] = new_df["x_i"]
+    new_df["y_raw"] = new_df["y_i"]
 
     # ------------------------------------------------------------------
     # Centered smoothing on positions
@@ -76,13 +76,13 @@ def build_features(
 
     # Centered rolling mean reduces high-frequency measurement noise
     # without eliminating physical discontinuities (hits / bounces).
-    df["x_smooth"] = (
-        df["x_raw"]
+    new_df["x_smooth"] = (
+        new_df["x_raw"]
         .rolling(smooth_window, center=True, min_periods=1)
         .mean()
     )
-    df["y_smooth"] = (
-        df["y_raw"]
+    new_df["y_smooth"] = (
+        new_df["y_raw"]
         .rolling(smooth_window, center=True, min_periods=1)
         .mean()
     )
@@ -90,13 +90,13 @@ def build_features(
     # ------------------------------------------------------------------
     # Time step (central)
     # ------------------------------------------------------------------
-    t = df.index.to_series()
+    t = new_df.index.to_series()
 
     # ------------------------------------------------------------------
     # Smoothed derivatives (stable kinematics)
     # ------------------------------------------------------------------
-    x_smooth = df["x_smooth"].to_numpy()
-    y_smooth = df["y_smooth"].to_numpy()
+    x_smooth = new_df["x_smooth"].to_numpy()
+    y_smooth = new_df["y_smooth"].to_numpy()
 
     vx = np.gradient(x_smooth, t)
     vy = np.gradient(y_smooth, t)
@@ -107,18 +107,18 @@ def build_features(
     jx = np.gradient(ax, t)
     jy = np.gradient(ay, t)
 
-    df["vx"] = vx
-    df["vy"] = vy
-    df["ax"] = ax
-    df["ay"] = ay
-    df["jx"] = jx
-    df["jy"] = jy
+    new_df["vx"] = vx
+    new_df["vy"] = vy
+    new_df["ax"] = ax
+    new_df["ay"] = ay
+    new_df["jx"] = jx
+    new_df["jy"] = jy
 
     # ------------------------------------------------------------------
     # Raw derivatives (impulse-sensitive)
     # ------------------------------------------------------------------
-    x_raw = df["x_raw"].to_numpy()
-    y_raw = df["y_raw"].to_numpy()
+    x_raw = new_df["x_raw"].to_numpy()
+    y_raw = new_df["y_raw"].to_numpy()
 
     vx_raw = np.gradient(x_raw, t)
     vy_raw = np.gradient(y_raw, t)
@@ -129,70 +129,70 @@ def build_features(
     jx_raw = np.gradient(ax_raw, t)
     jy_raw = np.gradient(ay_raw, t)
 
-    df["vx_raw"] = vx_raw
-    df["vy_raw"] = vy_raw
-    df["ax_raw"] = ax_raw
-    df["ay_raw"] = ay_raw
-    df["jx_raw"] = jx_raw
-    df["jy_raw"] = jy_raw
+    new_df["vx_raw"] = vx_raw
+    new_df["vy_raw"] = vy_raw
+    new_df["ax_raw"] = ax_raw
+    new_df["ay_raw"] = ay_raw
+    new_df["jx_raw"] = jx_raw
+    new_df["jy_raw"] = jy_raw
 
     # ------------------------------------------------------------------
     # Raw derivatubes in absolute
     # ------------------------------------------------------------------
 
-    df["vx_abs_raw"] = np.abs(df["vx_raw"])
-    df["vy_abs_raw"] = np.abs(df["vy_raw"])
-    df["ax_abs_raw"] = np.abs(df["ax_raw"])
-    df["ay_abs_raw"] = np.abs(df["ay_raw"])
-    df["jx_abs_raw"] = np.abs(df["jx_raw"])
-    df["jy_abs_raw"] = np.abs(df["jy_raw"])
+    new_df["vx_abs_raw"] = np.abs(new_df["vx_raw"])
+    new_df["vy_abs_raw"] = np.abs(new_df["vy_raw"])
+    new_df["ax_abs_raw"] = np.abs(new_df["ax_raw"])
+    new_df["ay_abs_raw"] = np.abs(new_df["ay_raw"])
+    new_df["jx_abs_raw"] = np.abs(new_df["jx_raw"])
+    new_df["jy_abs_raw"] = np.abs(new_df["jy_raw"])
 
     # ------------------------------------------------------------------
     # Magnitudes (smoothed)
     # ------------------------------------------------------------------
-    df["v"] = np.sqrt(df["vx"]**2 + df["vy"]**2)
-    df["a"] = np.sqrt(df["ax"]**2 + df["ay"]**2)
-    df["jerk"] = np.sqrt(df["jx"]**2 + df["jy"]**2)
+    new_df["v"] = np.sqrt(new_df["vx"]**2 + new_df["vy"]**2)
+    new_df["a"] = np.sqrt(new_df["ax"]**2 + new_df["ay"]**2)
+    new_df["jerk"] = np.sqrt(new_df["jx"]**2 + new_df["jy"]**2)
 
     # ------------------------------------------------------------------
     # Log magnitudes : preserves order and compresses large values
     # ------------------------------------------------------------------
-    df["log_v"] = np.log1p(df["v"])    
-    df["log_a"] = np.log1p(df["a"])
-    df["log_j"] = np.log1p(df["jerk"])
+    new_df["log_v"] = np.log1p(new_df["v"])    
+    new_df["log_a"] = np.log1p(new_df["a"])
+    new_df["log_j"] = np.log1p(new_df["jerk"])
 
     # ------------------------------------------------------------------
     # Directional features
     # ------------------------------------------------------------------
-    df["angle"] = np.arctan2(df["vy"], df["vx"])
-    df["delta_angle"] = np.gradient(df["angle"])
+    new_df["angle"] = np.arctan2(new_df["vy"], new_df["vx"])
+    new_df["delta_angle"] = np.gradient(new_df["angle"])
 
     # ------------------------------------------------------------------
     # Centered rolling statistics (smoothed)
     # ------------------------------------------------------------------
-    df["v_mean"] = df["v"].rolling(smooth_window, center=True, min_periods=1).mean()
-    df["v_std"]  = df["v"].rolling(smooth_window, center=True, min_periods=1).std().fillna(0)
+    new_df["v_mean"] = new_df["v"].rolling(smooth_window, center=True, min_periods=1).mean()
+    new_df["v_std"]  = new_df["v"].rolling(smooth_window, center=True, min_periods=1).std().fillna(0)
 
-    df["a_mean"] = df["a"].rolling(smooth_window, center=True, min_periods=1).mean()
-    df["a_std"]  = df["a"].rolling(smooth_window, center=True, min_periods=1).std().fillna(0)
+    new_df["a_mean"] = new_df["a"].rolling(smooth_window, center=True, min_periods=1).mean()
+    new_df["a_std"]  = new_df["a"].rolling(smooth_window, center=True, min_periods=1).std().fillna(0)
 
-    df["j_mean"] = df["jerk"].rolling(smooth_window, center=True, min_periods=1).mean()
-    df["j_std"]  = df["jerk"].rolling(smooth_window, center=True, min_periods=1).std().fillna(0)
+    new_df["j_mean"] = new_df["jerk"].rolling(smooth_window, center=True, min_periods=1).mean()
+    new_df["j_std"]  = new_df["jerk"].rolling(smooth_window, center=True, min_periods=1).std().fillna(0)
 
     # ------------------------------------------------------------------
     # Motion sign changes
     # ------------------------------------------------------------------
-    df["vx_sign"] = np.sign(df["vx"]).fillna(0.0)
-    df["vx_sign_change"] = (
-        df["vx_sign"].diff().abs() > 0
+    new_df["vx_sign"] = np.sign(new_df["vx"]).fillna(0.0)
+    new_df["vx_sign_change"] = (
+        new_df["vx_sign"].diff().abs() > 0
     ).astype(int)
     
-    df["vy_sign"] = np.sign(df["vy"]).fillna(0.0)
-    df["vy_sign_change"] = (
-        df["vy_sign"].diff().abs() > 0
+    new_df["vy_sign"] = np.sign(new_df["vy"]).fillna(0.0)
+    new_df["vy_sign_change"] = (
+        new_df["vy_sign"].diff().abs() > 0
     ).astype(int)
 
-    return df
+    return new_df
 
 
 def transform_for_model(
