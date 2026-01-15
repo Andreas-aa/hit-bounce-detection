@@ -5,6 +5,9 @@ import joblib
 import numpy as np
 import pandas as pd
 
+from scipy.signal import find_peaks
+
+
 FEATURE_COLS = [
     "delta_angle",
     "vx_sign_change", 
@@ -31,13 +34,18 @@ def load_model(model_path="model/rf_model.joblib"):
         model = joblib.load(f)
     return model
 
+# Load trained model
+def load_threshold(threshold_path="thresholds_physics.joblib"):
+    with open(threshold_path, "rb") as f:
+        threshold = joblib.load(f)
+    return threshold
 
 if __name__ == "__main__":
     model = load_model()
 
 
 def build_features(
-    subset_df: pd.DataFrame,
+    df: pd.DataFrame,
     smooth_window: int = 7,
 ) -> pd.DataFrame:
     """
@@ -48,19 +56,19 @@ def build_features(
     # ------------------------------------------------------------------
     # Numeric positions and index
     # ------------------------------------------------------------------
-    subset = subset_df.copy()
-    subset.index = pd.to_numeric(subset.index, errors="coerce")
-    subset = subset.sort_index()
-    subset["x_i"] = pd.to_numeric(subset["x"], errors="coerce")
-    subset["y_i"] = pd.to_numeric(subset["y"], errors="coerce")
-    subset = subset.dropna(subset=["x_i", "y_i"])
+    df = df.copy()
+    df.index = pd.to_numeric(df.index, errors="coerce")
+    df = df.sort_index()
+    df["x_i"] = pd.to_numeric(df["x"], errors="coerce")
+    df["y_i"] = pd.to_numeric(df["y"], errors="coerce")
+    df = df.dropna(df=["x_i", "y_i"])
     
 
     # ------------------------------------------------------------------
     # Raw positions
     # ------------------------------------------------------------------
-    subset["x_raw"] = subset["x_i"]
-    subset["y_raw"] = subset["y_i"]
+    df["x_raw"] = df["x_i"]
+    df["y_raw"] = df["y_i"]
 
     # ------------------------------------------------------------------
     # Centered smoothing on positions
@@ -68,13 +76,13 @@ def build_features(
 
     # Centered rolling mean reduces high-frequency measurement noise
     # without eliminating physical discontinuities (hits / bounces).
-    subset["x_smooth"] = (
-        subset["x_raw"]
+    df["x_smooth"] = (
+        df["x_raw"]
         .rolling(smooth_window, center=True, min_periods=1)
         .mean()
     )
-    subset["y_smooth"] = (
-        subset["y_raw"]
+    df["y_smooth"] = (
+        df["y_raw"]
         .rolling(smooth_window, center=True, min_periods=1)
         .mean()
     )
@@ -82,13 +90,13 @@ def build_features(
     # ------------------------------------------------------------------
     # Time step (central)
     # ------------------------------------------------------------------
-    t = subset.index.to_series()
+    t = df.index.to_series()
 
     # ------------------------------------------------------------------
     # Smoothed derivatives (stable kinematics)
     # ------------------------------------------------------------------
-    x_smooth = subset["x_smooth"].to_numpy()
-    y_smooth = subset["y_smooth"].to_numpy()
+    x_smooth = df["x_smooth"].to_numpy()
+    y_smooth = df["y_smooth"].to_numpy()
 
     vx = np.gradient(x_smooth, t)
     vy = np.gradient(y_smooth, t)
@@ -99,18 +107,18 @@ def build_features(
     jx = np.gradient(ax, t)
     jy = np.gradient(ay, t)
 
-    subset["vx"] = vx
-    subset["vy"] = vy
-    subset["ax"] = ax
-    subset["ay"] = ay
-    subset["jx"] = jx
-    subset["jy"] = jy
+    df["vx"] = vx
+    df["vy"] = vy
+    df["ax"] = ax
+    df["ay"] = ay
+    df["jx"] = jx
+    df["jy"] = jy
 
     # ------------------------------------------------------------------
     # Raw derivatives (impulse-sensitive)
     # ------------------------------------------------------------------
-    x_raw = subset["x_raw"].to_numpy()
-    y_raw = subset["y_raw"].to_numpy()
+    x_raw = df["x_raw"].to_numpy()
+    y_raw = df["y_raw"].to_numpy()
 
     vx_raw = np.gradient(x_raw, t)
     vy_raw = np.gradient(y_raw, t)
@@ -121,70 +129,70 @@ def build_features(
     jx_raw = np.gradient(ax_raw, t)
     jy_raw = np.gradient(ay_raw, t)
 
-    subset["vx_raw"] = vx_raw
-    subset["vy_raw"] = vy_raw
-    subset["ax_raw"] = ax_raw
-    subset["ay_raw"] = ay_raw
-    subset["jx_raw"] = jx_raw
-    subset["jy_raw"] = jy_raw
+    df["vx_raw"] = vx_raw
+    df["vy_raw"] = vy_raw
+    df["ax_raw"] = ax_raw
+    df["ay_raw"] = ay_raw
+    df["jx_raw"] = jx_raw
+    df["jy_raw"] = jy_raw
 
     # ------------------------------------------------------------------
     # Raw derivatubes in absolute
     # ------------------------------------------------------------------
 
-    subset["vx_abs_raw"] = np.abs(subset["vx_raw"])
-    subset["vy_abs_raw"] = np.abs(subset["vy_raw"])
-    subset["ax_abs_raw"] = np.abs(subset["ax_raw"])
-    subset["ay_abs_raw"] = np.abs(subset["ay_raw"])
-    subset["jx_abs_raw"] = np.abs(subset["jx_raw"])
-    subset["jy_abs_raw"] = np.abs(subset["jy_raw"])
+    df["vx_abs_raw"] = np.abs(df["vx_raw"])
+    df["vy_abs_raw"] = np.abs(df["vy_raw"])
+    df["ax_abs_raw"] = np.abs(df["ax_raw"])
+    df["ay_abs_raw"] = np.abs(df["ay_raw"])
+    df["jx_abs_raw"] = np.abs(df["jx_raw"])
+    df["jy_abs_raw"] = np.abs(df["jy_raw"])
 
     # ------------------------------------------------------------------
     # Magnitudes (smoothed)
     # ------------------------------------------------------------------
-    subset["v"] = np.sqrt(subset["vx"]**2 + subset["vy"]**2)
-    subset["a"] = np.sqrt(subset["ax"]**2 + subset["ay"]**2)
-    subset["jerk"] = np.sqrt(subset["jx"]**2 + subset["jy"]**2)
+    df["v"] = np.sqrt(df["vx"]**2 + df["vy"]**2)
+    df["a"] = np.sqrt(df["ax"]**2 + df["ay"]**2)
+    df["jerk"] = np.sqrt(df["jx"]**2 + df["jy"]**2)
 
     # ------------------------------------------------------------------
     # Log magnitudes : preserves order and compresses large values
     # ------------------------------------------------------------------
-    subset["log_v"] = np.log1p(subset["v"])    
-    subset["log_a"] = np.log1p(subset["a"])
-    subset["log_j"] = np.log1p(subset["jerk"])
+    df["log_v"] = np.log1p(df["v"])    
+    df["log_a"] = np.log1p(df["a"])
+    df["log_j"] = np.log1p(df["jerk"])
 
     # ------------------------------------------------------------------
     # Directional features
     # ------------------------------------------------------------------
-    subset["angle"] = np.arctan2(subset["vy"], subset["vx"])
-    subset["delta_angle"] = np.gradient(subset["angle"])
+    df["angle"] = np.arctan2(df["vy"], df["vx"])
+    df["delta_angle"] = np.gradient(df["angle"])
 
     # ------------------------------------------------------------------
     # Centered rolling statistics (smoothed)
     # ------------------------------------------------------------------
-    subset["v_mean"] = subset["v"].rolling(smooth_window, center=True, min_periods=1).mean()
-    subset["v_std"]  = subset["v"].rolling(smooth_window, center=True, min_periods=1).std().fillna(0)
+    df["v_mean"] = df["v"].rolling(smooth_window, center=True, min_periods=1).mean()
+    df["v_std"]  = df["v"].rolling(smooth_window, center=True, min_periods=1).std().fillna(0)
 
-    subset["a_mean"] = subset["a"].rolling(smooth_window, center=True, min_periods=1).mean()
-    subset["a_std"]  = subset["a"].rolling(smooth_window, center=True, min_periods=1).std().fillna(0)
+    df["a_mean"] = df["a"].rolling(smooth_window, center=True, min_periods=1).mean()
+    df["a_std"]  = df["a"].rolling(smooth_window, center=True, min_periods=1).std().fillna(0)
 
-    subset["j_mean"] = subset["jerk"].rolling(smooth_window, center=True, min_periods=1).mean()
-    subset["j_std"]  = subset["jerk"].rolling(smooth_window, center=True, min_periods=1).std().fillna(0)
+    df["j_mean"] = df["jerk"].rolling(smooth_window, center=True, min_periods=1).mean()
+    df["j_std"]  = df["jerk"].rolling(smooth_window, center=True, min_periods=1).std().fillna(0)
 
     # ------------------------------------------------------------------
     # Motion sign changes
     # ------------------------------------------------------------------
-    subset["vx_sign"] = np.sign(subset["vx"]).fillna(0.0)
-    subset["vx_sign_change"] = (
-        subset["vx_sign"].diff().abs() > 0
+    df["vx_sign"] = np.sign(df["vx"]).fillna(0.0)
+    df["vx_sign_change"] = (
+        df["vx_sign"].diff().abs() > 0
     ).astype(int)
     
-    subset["vy_sign"] = np.sign(subset["vy"]).fillna(0.0)
-    subset["vy_sign_change"] = (
-        subset["vy_sign"].diff().abs() > 0
+    df["vy_sign"] = np.sign(df["vy"]).fillna(0.0)
+    df["vy_sign_change"] = (
+        df["vy_sign"].diff().abs() > 0
     ).astype(int)
 
-    return subset
+    return df
 
 
 def transform_for_model(
@@ -197,7 +205,104 @@ def transform_for_model(
     X_scaled = preprocessors["scaler"].transform(X)
     X_deep_scaled = preprocessors["scaler_deep"].transform(X_deep)
 
-    return X_scaled, X_deep_scaled
+    return X, X_scaled, X_deep_scaled
+
+
+# ==============================
+# Physics-based event detection
+# ==============================
+def detect_hits_and_bounces(df_test, thresholds, min_frames=10, window=2):
+    """
+    Detect events ("hit" or "bounce") from motion trajectory data.
+    """
+    df = df_test.copy()
+
+    # Raw signals
+    vert_acc = df["ay_raw"].values
+    vert_acc_abs = df["ay_abs_raw"].values
+    horiz_speed = df["vx_raw"].values
+    vert_speed = df["vy_raw"].values
+    jerk_vals = df["jerk"].values
+
+    # Candidate event peaks
+    peaks, _ = find_peaks(
+        vert_acc_abs,
+        height=thresholds["VERT_ACC_MIN"],
+        prominence=thresholds["VERT_ACC_PROM"],
+        distance=3
+    )
+
+    candidate_events = []
+
+    for idx in peaks:
+        if idx < window or idx + window >= len(df):
+            continue
+
+        # Velocity states around event
+        vx_before, vx_after = horiz_speed[idx - window], horiz_speed[idx + window]
+        vy_before, vy_after = vert_speed[idx - window], vert_speed[idx + window]
+        ay_val = vert_acc[idx]
+        jerk_val = jerk_vals[idx]
+
+        # Derived physics metrics
+        horiz_flip = vx_before * vx_after < 0
+        vert_flip = vy_before * vy_after < 0
+        horiz_delta = abs(vx_after) - abs(vx_before)
+        vert_ratio = abs(vy_after) / (abs(vy_before) + 1e-6)
+        angle_before = np.arctan2(vy_before, vx_before)
+        angle_after = np.arctan2(vy_after, vx_after)
+        angle_change = abs(angle_after - angle_before)
+
+        # Event scoring
+        hit_points = 0.0
+        bounce_points = 0.0
+
+        # Hit scoring
+        hit_points += 2.0 if horiz_flip else 0.0 # vx changes direction
+        hit_points += 1.5 if horiz_delta > thresholds["HORIZ_SPEED_DELTA"] else 0.0 # Magnitude of vx increases sharply in additional speed (not in ratio)
+        hit_points += 1.0 if vert_ratio > 1.1 else 0.0 # vy after the event increases by more than 10% (in magnitude)
+        hit_points += 1.0 if jerk_val > thresholds["JERK_THRESHOLD"] else 0.0 # If the rate of change of acceleration is high
+        hit_points += 1.0 if angle_change > np.pi / 4 else 0.0 # If trajectory angle changes by more than 45°
+
+        # Bounce scoring
+        bounce_points += 2.0 if ay_val < thresholds["VERT_ACC_BOUNCE"] else 0.0 # ay is very negative
+        bounce_points += 1.5 if vert_flip else 0.0 # vy changes direction
+        bounce_points += 1.0 if vert_ratio < 0.8 else 0.0 # vy after the event decrease by more than 20% (energy loss)
+
+        # Decide event type
+        event_type = None
+        if hit_points >= bounce_points and hit_points >= 2.5:
+            event_type = "hit"
+        elif bounce_points > hit_points and bounce_points >= 2.0:
+            event_type = "bounce"
+
+        # Computing strength score to help chosing between close events
+        strength_score = abs(ay_val) + jerk_val + abs(horiz_delta) + angle_change
+
+        if event_type:
+            candidate_events.append((df.index[idx], event_type, strength_score))
+
+    # ==============================
+    # Strongest Event Selection (to prevent from selecting event too close)
+    # ==============================
+    candidate_events.sort(key=lambda x: x[0])
+    final_events = {}
+
+    for frame_id, label, score in candidate_events:
+        if not final_events:
+            final_events[frame_id] = (label, score)
+            continue
+
+        last_frame = max(final_events.keys())
+        if frame_id - last_frame >= min_frames:
+            final_events[frame_id] = (label, score)
+        else:
+            # Keep the event with higher strength
+            if score > final_events[last_frame][1]:
+                final_events[last_frame] = (label, score)
+
+    # Return events by frame
+    return {frame: label for frame, (label, _) in final_events.items()}
 
 
 def supervized_hit_bounce_detection(json_path: Path):
@@ -218,7 +323,7 @@ def supervized_hit_bounce_detection(json_path: Path):
     new_df = build_features(file_df, smooth_window=SMOOTH_WINDOW)
     preprocessors = joblib.load("preprocessors.joblib")
     # Predicting using Random Forest, no need for Deep Learning Features
-    X_new, X_new_deep = transform_for_model(new_df, preprocessors)
+    _, X_new, _ = transform_for_model(new_df, preprocessors)
 
     # Load model and predict
     model = load_model()
@@ -233,6 +338,48 @@ def supervized_hit_bounce_detection(json_path: Path):
 
     with json_path.open("w", encoding="utf-8") as f:
         json.dump(updated_json, f, indent=4)
+
+    print(f"Predictions added to '{json_path}' successfully!")
+
+    return updated_json
+
+
+def unsupervized_hit_bounce_detection(json_path: Path):
+    # Load JSON into a DataFrame
+    df = pd.DataFrame(columns=["x", "y", "visible"])
+    df.index.name = "image_frame"
+
+    with json_path.open("r", encoding="utf-8") as f:
+        ball_data = json.load(f)
+
+    file_df = pd.DataFrame(ball_data).T
+    file_df.index.name = "image_frame"
+
+    # Ensure correct columns
+    file_df = file_df.reindex(columns=["x", "y", "visible"])
+
+    # Build features and preprocess
+    new_df = build_features(file_df, smooth_window=SMOOTH_WINDOW)
+
+    thresh = load_threshold
+
+    # Predicting using the function
+    y_pred = detect_hits_and_bounces(new_df, thresholds=thresh)
+    y_pred_array = np.array(["air"] * len(new_df.shape[0]), dtype=object)
+    for frame, label in y_pred.items():
+        if frame in df.index:
+            idx = df.index.get_loc(frame)
+            y_pred_array[idx] = label
+
+    new_df["action"] = y_pred_array
+
+
+    # Update original JSON
+    # Convert DataFrame back to dictionary with same structure
+    updated_json = new_df[["x", "y", "visible", "action"]].T.to_dict()
+
+    # with json_path.open("w", encoding="utf-8") as f:
+    #     json.dump(updated_json, f, indent=4)
 
     print(f"Predictions added to '{json_path}' successfully!")
 
