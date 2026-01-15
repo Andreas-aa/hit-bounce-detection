@@ -361,11 +361,11 @@ def unsupervized_hit_bounce_detection(json_path: Path):
     # Build features and preprocess
     new_df = build_features(file_df, smooth_window=SMOOTH_WINDOW)
 
-    thresh = load_threshold
+    thresh = load_threshold()
 
     # Predicting using the function
     y_pred = detect_hits_and_bounces(new_df, thresholds=thresh)
-    y_pred_array = np.array(["air"] * len(new_df.shape[0]), dtype=object)
+    y_pred_array = np.array(["air"] * len(new_df), dtype=object)
     for frame, label in y_pred.items():
         if frame in df.index:
             idx = df.index.get_loc(frame)
