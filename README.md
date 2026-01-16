@@ -88,10 +88,10 @@ from main import unsupervized_hit_bounce_detection
 json_path = Path("path/to/trajectory.json")
 results = unsupervized_hit_bounce_detection(json_path)
 ```
+- Returns enriched JSON with "action" for each frame while saving the results in the input file
 - Uses physics thresholds from thresholds_physics.joblib
 - Computes scores for hit and bounce
 - Temporal suppression applied with a ±10 frame window to avoid over-counting nearby events
-- Returns enriched JSON with "action" for each frame while saving the results in the input file
 
 
 ## Evaluation (with last 20% frames)
