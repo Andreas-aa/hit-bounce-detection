@@ -22,7 +22,7 @@ HIT-BOUNCE-DETECTION/
 ├── preprocessors.joblib      # Saved preprocessing scalers and label encoder
 ├── thresholds_physics.joblib # Physics thresholds for bounce/hit detection
 ├── requirements.txt          # Python dependencies
-└── README.md                  # Project documentation
+└── README.md                 # Project documentation
 ```
 
 ---
