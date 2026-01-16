@@ -133,7 +133,6 @@ results = unsupervized_hit_bounce_detection(json_path)
 | Hit    | 0.635     | 0.539  | 0.583    |
 
 
-> **Observation:**  
-> - **Random Forest** outperforms physics-based rules when considering temporal tolerance, achieving higher F1-scores for both hits and bounces.  
-> - **Physics-based detection** remains interpretable and useful for high-confidence events, but has lower frame-level precision.  
-> - **Temporal suppression** of nearby events is key in both approaches to prevent over-counting and to provide realistic predictions for real-life ball trajectories.
+ ## **Observation:**  
+ - **Random Forest** outperforms physics-based rules when considering temporal tolerance, achieving higher F1-scores for both hits and bounces.  
+ - **Physics-based detection** remains interpretable and useful for high-confidence events, but has low scoring metrics, even more for frame-level detection.  
