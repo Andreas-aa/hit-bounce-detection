@@ -13,7 +13,6 @@ It includes preprocessing, feature extraction, and **temporal suppression** to i
 
 HIT-BOUNCE-DETECTION/
 ├── model/ # Saved Random Forest models
-├── per_point_v2/ # (optional) legacy or additional scripts
 ├── tool/ # Utility scripts
 ├── build_features.py # Feature extraction for ML and physics
 ├── physics.py # Physics-based event detection
@@ -33,14 +32,13 @@ HIT-BOUNCE-DETECTION/
 - Detects **motion sign changes** in x and y axes
 - Physics-based rules consider:
   - Vertical acceleration (ay)
-  - Horizontal speed changes (vx)
-  - Vertical speed ratio (vy_after / vy_before)
+  - Horizontal speed changes in magnitude and sign change
+  - Vertical speed ratio 
   - Jerk (rate of change of acceleration)
   - Trajectory angle changes
 - Temporal suppression:
   - ±3 frames for ML predictions
   - ±10 frames for physics rules
-  - Class-aware for ML (hit does not suppress bounce)
 - Evaluation at **frame level** and **temporal tolerance** (±2 frames)
 
 ---
