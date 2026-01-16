@@ -304,85 +304,163 @@ def detect_hits_and_bounces(df_test, thresholds, min_frames=10, window=2):
     # Return events by frame
     return {frame: label for frame, (label, _) in final_events.items()}
 
+def suppress_close_events(candidates, min_frames=3):
+    """
+    Temporal suppression:
+    keep only the highest-probability event within a time window.
+    Suppression is class-aware (hit does not suppress bounce).
+    """
+    candidates.sort(key=lambda x: x[0])  # sort by frame index
+    final_events = {}
+
+    for frame, label, proba in candidates:
+        if not final_events:
+            final_events[frame] = (label, proba)
+            continue
+
+        last_frame = max(final_events.keys())
+        last_label, last_proba = final_events[last_frame]
+
+        if frame - last_frame >= min_frames:
+            final_events[frame] = (label, proba)
+        else:
+            # suppress only if same class
+            if label == last_label and proba > last_proba:
+                final_events[last_frame] = (label, proba)
+
+    return final_events
+
 
 def supervized_hit_bounce_detection(json_path: Path):
-    # Load JSON into a DataFrame
-    df = pd.DataFrame(columns=["x", "y", "visible"])
-    df.index.name = "image_frame"
-
+    # --------------------------------------------------
+    # Load JSON into DataFrame
+    # --------------------------------------------------
     with json_path.open("r", encoding="utf-8") as f:
         ball_data = json.load(f)
 
     file_df = pd.DataFrame(ball_data).T
     file_df.index.name = "image_frame"
-
-    # Ensure correct columns
     file_df = file_df.reindex(columns=["x", "y", "visible"])
 
-    # Build features and preprocess
+    # --------------------------------------------------
+    # Feature engineering
+    # --------------------------------------------------
     new_df = build_features(file_df, smooth_window=SMOOTH_WINDOW)
+
     preprocessors = joblib.load("preprocessors.joblib")
-    # Predicting using Random Forest, no need for Deep Learning Features
     X_new, _, _ = transform_for_model(new_df, preprocessors)
 
-    # Load model and predict
+    # --------------------------------------------------
+    # Model inference
+    # --------------------------------------------------
     model = load_model()
+
     y_pred = model.predict(X_new)
+    y_proba = model.predict_proba(X_new)
 
-    # Add predictions as a new column
-    new_df["action"] = y_pred
+    class_index = {c: i for i, c in enumerate(model.classes_)}
 
-    # Update original JSON
-    # Convert DataFrame back to dictionary with same structure
-    updated_json = new_df[["x", "y", "visible", "action"]].T.to_dict()
+    predicted_proba = np.array([
+        y_proba[i, class_index[y_pred[i]]]
+        for i in range(len(y_pred))
+    ])
 
+    # --------------------------------------------------
+    # Build candidates for suppression
+    # --------------------------------------------------
+    candidates = []
+    for frame, label, proba in zip(new_df.index, y_pred, predicted_proba):
+        if label != "air":
+            candidates.append((frame, label, proba))
+
+    # --------------------------------------------------
+    # Apply temporal suppression (3 frames)
+    # --------------------------------------------------
+    final_events = suppress_close_events(candidates, min_frames=3)
+
+    # --------------------------------------------------
+    # Assign final labels
+    # --------------------------------------------------
+    new_df["action"] = "air"
+    for frame, (label, _) in final_events.items():
+        new_df.loc[frame, "action"] = label
+
+    # --------------------------------------------------
+    # Export JSON
+    # --------------------------------------------------
+    enriched_json = new_df[["x", "y", "visible", "action"]].T.to_dict()
+
+    # Saving the enriched json
     with json_path.open("w", encoding="utf-8") as f:
-        json.dump(updated_json, f, indent=4)
+        json.dump(enriched_json, f, indent=4)
 
     print(f"Predictions added to '{json_path}' successfully!")
 
-    return updated_json
+    return enriched_json
 
 
 def unsupervized_hit_bounce_detection(json_path: Path):
-    # Load JSON into a DataFrame
+    # --------------------------------------------------
+    # Load JSON file into a DataFrame
+    # --------------------------------------------------
+    # Initialize empty DataFrame to define expected structure
     df = pd.DataFrame(columns=["x", "y", "visible"])
     df.index.name = "image_frame"
 
+    # Read ball trajectory data from JSON
     with json_path.open("r", encoding="utf-8") as f:
         ball_data = json.load(f)
 
+    # Convert JSON (frame → data) into DataFrame
     file_df = pd.DataFrame(ball_data).T
     file_df.index.name = "image_frame"
 
-    # Ensure correct columns
+    # Ensure required columns exist and are correctly ordered
     file_df = file_df.reindex(columns=["x", "y", "visible"])
 
-    # Build features and preprocess
+    # --------------------------------------------------
+    # Feature extraction (physics-based)
+    # --------------------------------------------------
+    # Build kinematic features (velocity, acceleration, jerk, etc.)
     new_df = build_features(file_df, smooth_window=SMOOTH_WINDOW)
 
+    # Load physics thresholds used for rule-based detection
     thresh = load_threshold()
 
-    # Predicting using the function
+    # --------------------------------------------------
+    # Physics-based hit / bounce detection
+    # --------------------------------------------------
+    # Detect events using handcrafted physics rules
+    # Returns a dict: {frame_index: "hit" or "bounce"}
     y_pred = detect_hits_and_bounces(new_df, thresholds=thresh)
+
+    # Initialize all frames as "air"
     y_pred_array = np.array(["air"] * len(new_df), dtype=object)
+
+    # Assign detected events to corresponding frames
     for frame, label in y_pred.items():
         try:
+            # Convert frame index to positional index
             idx = new_df.index.get_loc(frame)
             y_pred_array[idx] = label
         except KeyError:
-            # frame not in index, skip
+            # Frame not present in DataFrame index (safe guard)
             pass
+
+    # Store final action labels
     new_df["action"] = y_pred_array
 
+    # --------------------------------------------------
+    # Export enriched JSON
+    # --------------------------------------------------
+    # Convert DataFrame back to original JSON-like structure
+    enriched_json = new_df[["x", "y", "visible", "action"]].T.to_dict()
 
-    # Update original JSON
-    # Convert DataFrame back to dictionary with same structure
-    updated_json = new_df[["x", "y", "visible", "action"]].T.to_dict()
-
+    # Overwrite input JSON with detected actions
     with json_path.open("w", encoding="utf-8") as f:
-        json.dump(updated_json, f, indent=4)
+        json.dump(enriched_json, f, indent=4)
 
     print(f"Predictions added to '{json_path}' successfully!")
 
-    return updated_json
+    return enriched_json
+
