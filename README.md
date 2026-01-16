@@ -15,6 +15,7 @@ HIT-BOUNCE-DETECTION/
 ├── model/                    # Saved Random Forest models
 ├── per_point_v2/             # JSON files for training and testing
 ├── tool/                     # Viz tool
+├── unused_models/            # LSTM, MLP, XGB and other models but not kept for final evaluation 
 ├── build_features.py         # Feature extraction for ML and physics
 ├── physics.py                # Physics-based event detection
 ├── main.py                   # Main script for supervised and unsupervised detection
