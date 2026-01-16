@@ -45,6 +45,19 @@ HIT-BOUNCE-DETECTION/
 
 ---
 
+## Assumptions
+
+### ML (Random Forest)
+
+- **Class weights are balanced** to further mitigate class imbalance, ensuring rare events like hits and bounces are properly considered during training.
+- The hyperparamaters are selected in gridsearch using **F1-macro**, which balances precision and recall across all classes. This is important because the dataset is heavily dominated by the “air” class.
+
+### Physics-based rules
+- Rules are applied only to **candidate frames with high absolute vertical acceleration.** This reduces false positives, since hits or bounces produce sudden, significant changes in vertical motion.
+- Hits are easier to detect from physics features than bounces. To account for this, **bounce classification rules are slightly softer**, allowing the system to prioritize detecting bounces when a candidate frame shows a significant event.
+
+
+
 ## Installation
 
 ```bash
