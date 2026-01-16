@@ -48,33 +48,37 @@ HIT-BOUNCE-DETECTION/
 
 ```bash
 git clone <repo_url>
-cd HIT-BOUNCE-DETECTION
+cd your_repo
 pip install -r requirements.txt
 ```
 
 ## Usage
+### Supervised detection (Random Forest)
 ```bash
-Supervised detection (Random Forest)
 from pathlib import Path
 from main import supervized_hit_bounce_detection
 
 json_path = Path("path/to/trajectory.json")
 results = supervized_hit_bounce_detection(json_path)
-Returns enriched JSON with "action" for each frame whilse saving the results in the input file
-Temporal suppression applied (3-frame window)
+```
+- Returns enriched JSON with "action" for each frame while saving the results in the input file
+- Temporal suppression applied (3-frame window)
 
-Unsupervised physics-based detection
+### Unsupervised physics-based detection
+```bash
+from pathlib import Path
 from main import unsupervized_hit_bounce_detection
 
 json_path = Path("path/to/trajectory.json")
 results = unsupervized_hit_bounce_detection(json_path)
-Uses physics thresholds from thresholds_physics.joblib
-Computes scores for hit and bounce
-Temporal suppression applied (10-frame window)
-Returns enriched JSON with "action" for each frame whilse saving the results in the input file
 ```
+- Uses physics thresholds from thresholds_physics.joblib
+- Computes scores for hit and bounce
+- Temporal suppression applied (10-frame window)
+- Returns enriched JSON with "action" for each frame while saving the results in the input file
 
-## Evaluation
+
+## Evaluation (with last 20% frames)
 
 ### Supervised Random Forest Model
 
