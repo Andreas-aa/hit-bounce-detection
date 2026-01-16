@@ -38,14 +38,15 @@ HIT-BOUNCE-DETECTION/
   - Vertical speed ratio 
   - Jerk (rate of change of acceleration)
   - Trajectory angle changes
-- Temporal suppression:
-  - ±3 frames for ML predictions
-  - ±10 frames for physics rules
-- Evaluation at **frame level** and **temporal tolerance** (±2 frames)
-
----
 
 ## Assumptions
+
+### Frame precision
+Due to natural measurement noise, evaluating **frame-level accuracy** can be misleading. Using **temporal suppression** and **temporal tolerance** provides a more realistic assessment of detection performance, as reflected in the results.
+- **Suppression of events predicted too close to each other** :
+  - ±3 frames for ML predictions
+  - ±10 frames for physics rules
+- Evaluation is reported both **at frame level** and with **temporal tolerance** (±2 frames) to account for slight timing variations.
 
 ### ML (Random Forest)
 
@@ -54,7 +55,8 @@ HIT-BOUNCE-DETECTION/
 
 ### Physics-based rules
 - Rules are applied only to **candidate frames with high absolute vertical acceleration.** This reduces false positives, since hits or bounces produce sudden, significant changes in vertical motion.
-- Hits are easier to detect from physics features than bounces. To account for this, **bounce classification rules are slightly softer**, allowing the system to prioritize detecting bounces when a candidate frame shows a significant event.
+- **Bounce rules are intentionally softer than hit rules** to prioritize correct bounce detection, since hits are easier to detect from physics features and can sometimes overshadow bounces.
+
 
 
 
@@ -76,7 +78,7 @@ json_path = Path("path/to/trajectory.json")
 results = supervized_hit_bounce_detection(json_path)
 ```
 - Returns enriched JSON with "action" for each frame while saving the results in the input file
-- Temporal suppression applied (3-frame window)
+- Temporal suppression applied with a ±3 frame window to avoid over-counting nearby events
 
 ### Unsupervised physics-based detection
 ```bash
@@ -88,7 +90,7 @@ results = unsupervized_hit_bounce_detection(json_path)
 ```
 - Uses physics thresholds from thresholds_physics.joblib
 - Computes scores for hit and bounce
-- Temporal suppression applied (10-frame window)
+- Temporal suppression applied with a ±10 frame window to avoid over-counting nearby events
 - Returns enriched JSON with "action" for each frame while saving the results in the input file
 
 
