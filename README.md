@@ -12,15 +12,16 @@ It includes preprocessing, feature extraction, and **temporal suppression** to i
 ## Project Structure
 ```text
 HIT-BOUNCE-DETECTION/
-├── model/ # Saved Random Forest models
-├── tool/ # Viz tool
-├── build_features.py # Feature extraction for ML and physics
-├── physics.py # Physics-based event detection
-├── main.py # Main script for supervised and unsupervised detection
-├── preprocessors.joblib # Saved preprocessing scalers and label encoder
+├── model/                    # Saved Random Forest models
+├── per_point_v2/             # JSON files for training and testing
+├── tool/                     # Viz tool
+├── build_features.py         # Feature extraction for ML and physics
+├── physics.py                # Physics-based event detection
+├── main.py                   # Main script for supervised and unsupervised detection
+├── preprocessors.joblib      # Saved preprocessing scalers and label encoder
 ├── thresholds_physics.joblib # Physics thresholds for bounce/hit detection
-├── requirements.txt # Python dependencies
-└── README.md # Project documentation
+├── requirements.txt          # Python dependencies
+└── README.md                  # Project documentation
 ```
 
 ---
